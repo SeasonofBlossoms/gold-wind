@@ -1,0 +1,34 @@
+{
+  "name": "gold-wind",
+  "version": "1.0.0",
+  "description": "A Component Library for React",
+  "scripts": {
+    "build": "gold-wind-tools run start"
+  },
+  "keywords": [
+    "component",
+    "components",
+    "design",
+    "react",
+    "react-component",
+    "ui"
+  ],
+  "main": "lib/index.js",
+  "module": "es/index.mjs",
+  "unpkg": "dist/bundle.js",
+  "typings": "es/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/react": "^19.1.5",
+    "react": "^19.1.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@gold-wind/tools": "file:../react-component-library-tools/dist/gold-wind-tools-1.0.0.tgz",
+    "classnames": "^2.5.1"
+  }
+}
