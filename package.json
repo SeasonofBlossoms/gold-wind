@@ -1,6 +1,6 @@
 {
   "name": "gold-wind",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "A Component Library for React",
   "scripts": {
     "build": "gold-wind-tools run start"
@@ -28,7 +28,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@gold-wind/tools": "file:../react-component-library-tools/dist/gold-wind-tools-1.0.0.tgz",
-    "classnames": "^2.5.1"
+    "classnames": "^2.5.1",
+    "gold-wind-tools": "^1.0.7"
   }
 }
