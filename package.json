@@ -29,6 +29,6 @@
   },
   "dependencies": {
     "classnames": "^2.5.1",
-    "gold-wind-tools": "^1.0.7"
+    "gold-wind-tools": "^1.0.20"
   }
 }
