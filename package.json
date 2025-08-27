@@ -18,7 +18,7 @@
   "unpkg": "dist/bundle.js",
   "typings": "es/index.d.ts",
   "files": [
-    "dist"
+    "**/*"
   ],
   "author": "",
   "license": "MIT",
