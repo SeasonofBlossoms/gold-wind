@@ -1,8 +1,10 @@
+# 这个工作流的核心目的是：当有人在仓库的 GitHub Discussions（讨论区）中创建一个新的讨论时，自动发送一条通知消息到一个钉钉（DingTalk）群聊中。
 name: Discussions
 
 on:
   discussion:
-    types: [created]
+    # types: [created]
+    types: []
 
 permissions:
   contents: read

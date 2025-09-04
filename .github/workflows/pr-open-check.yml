@@ -1,8 +1,37 @@
+# 这个 GitHub Actions 脚本的目的是 在 PR 被打开、编辑、重新打开或同步时自动进行检查，并根据特定规则进行评论和拒绝合并等操作。脚本的内容分为两个主要的 Job：
+
+# 1. PR 拒绝与验证 Job (refuse)
+# 触发条件：
+# PR 事件：当 PR 被打开（opened）、编辑（edited）、重新打开（reopened）或同步（synchronize）时触发。
+# 权限设置：
+# 读取内容：允许读取仓库内容。
+# 写入 PR 和问题：允许创建或更新 PR 评论，指定审阅者。
+# 操作步骤：
+# 使用 actions-cool/pr-welcome@v1 动作：
+# 拒绝 PR 合并：根据条件（如 PR 提及的 Issue 需要设计师或核心团队确认），PR 将被标记为需要进一步确认的状态。
+# 评论内容：向 PR 创建者留言，告知该 PR 需要与设计师或核心团队进行确认。
+# 拒绝合并标签：给 PR 添加标签 🎱 Collaborate PR only，表示这是一个需要进一步协作和确认的 PR。
+# 指定审阅者：PR 将被指定给 MadCcc 和 zombieJ 作为审阅者。
+# 2. PR 内容检查与 changelog 校验 Job (check-changelog)
+# 触发条件：
+# PR 事件：同样在 PR 被打开、编辑、重新打开或同步时触发。
+# 权限设置：
+# 写入 PR：允许创建或更新 PR 评论。
+# 操作步骤：
+# 使用 actions-cool/pr-check-fill@v1 动作：
+# 检查 PR 中的 changelog 是否填写完整：该步骤要求 PR 创建者在 PR 描述中添加变更日志（changelog）。
+# 评论提醒：如果没有填写 changelog，将会自动评论提醒：
+# 提醒 PR 创建者按照 Keep a Changelog 规范来填写日志。
+# 提醒 PR 创建者描述改动对开发者的影响而非解决方案。
+# 提供参考链接：https://ant.design/changelog-cn
+# 忽略特定标题：如果 PR 标题以 docs、chore、test 或 ci 开头，跳过 changelog 检查。
 name: PR Open Check
 
 on:
+  # pull_request_target:
+  #   types: [opened, edited, reopened, synchronize]
   pull_request_target:
-    types: [opened, edited, reopened, synchronize]
+    types: []
 
 permissions:
   contents: read
@@ -10,8 +39,8 @@ permissions:
 jobs:
   refuse:
     permissions:
-      issues: write  # for actions-cool/pr-welcome to create, update & react on issues
-      pull-requests: write  # for actions-cool/pr-welcome to request reviewer
+      issues: write # for actions-cool/pr-welcome to create, update & react on issues
+      pull-requests: write # for actions-cool/pr-welcome to request reviewer
     runs-on: ubuntu-latest
     steps:
       - uses: actions-cool/pr-welcome@v1
@@ -29,7 +58,7 @@ jobs:
 
   check-changelog:
     permissions:
-      pull-requests: write  # for actions-cool/pr-check-fill to create or update PR comments
+      pull-requests: write # for actions-cool/pr-check-fill to create or update PR comments
     runs-on: ubuntu-latest
     steps:
       - name: check fill

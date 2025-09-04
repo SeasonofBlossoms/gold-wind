@@ -1,8 +1,10 @@
+# 这个工作流的核心目的是：每天自动检查所有已分配（assigned）且开放的 Issue，如果某个 Issue 超过 14 天没有更新且没有关联的 PR，就自动@分配者并发送一条友好的提醒消息，询问进展或是否需要重新分配。
 name: Issue Inactivity Reminder
 
 on:
-  schedule:
-    - cron: "0 0 * * *" # Run at 00:00 every day
+  # schedule:
+  #   - cron: "0 0 * * *" # Run at 00:00 every day
+  schedule: []
 
 permissions:
   issues: write

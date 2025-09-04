@@ -1,10 +1,20 @@
+# 这个脚本是用于自动化处理GitHub仓库中的问题（issues）标签。当问题被标记为特定标签时，脚本会根据标签的不同，执行相应的操作，例如：
+
+# help wanted：如果标签是“help wanted”，脚本会自动回复一个消息，邀请用户提交Pull Request，并提供相关指导。
+# Need Reproduce：如果标签是“Need Reproduce”，脚本会要求用户提供一个在线重现示例，以便团队进行问题排查。
+# Usage 或 Question：对于这类标签，脚本会提示用户到其他地方提问，避免在GitHub issues中讨论使用问题。
+# 3.x or 4.x：如果标签是“3.x”或“4.x”，表示当前版本已经过了维护期，脚本会关闭相关的问题。
+# Invalid：对于无效的issue，脚本会自动关闭并告知用户问题不符合要求。
+# unconfirmed：如果问题没有经过确认，脚本会删除标签。
 # Origin Source
 # https://github.com/ant-design/ant-design/blob/79f566b7f8abb1012ef55b0d2793bfdf5595b85d/.github/workflows/issue-reply.yml
 name: Issue Labeled
 
 on:
+  # issues:
+  #   types: [labeled]
   issues:
-    types: [labeled]
+    types: []
 
 permissions:
   contents: read
@@ -12,8 +22,8 @@ permissions:
 jobs:
   issue-labeled:
     permissions:
-      issues: write  # for actions-cool/issues-helper to update issues
-      pull-requests: write  # for actions-cool/issues-helper to update PRs
+      issues: write # for actions-cool/issues-helper to update issues
+      pull-requests: write # for actions-cool/issues-helper to update PRs
     runs-on: ubuntu-latest
     steps:
       - name: help wanted
@@ -86,6 +96,6 @@ jobs:
         if: github.event.label.name != 'unconfirmed'
         uses: actions-cool/issues-helper@v3
         with:
-            actions: remove-labels
-            issue-number: ${{ github.event.issue.number }}
-            labels: unconfirmed
+          actions: remove-labels
+          issue-number: ${{ github.event.issue.number }}
+          labels: unconfirmed

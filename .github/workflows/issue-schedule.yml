@@ -1,8 +1,31 @@
+# 这个 GitHub Actions 脚本的目的是 定期发送未确认的 issue 列表到钉钉群组，帮助团队成员及时处理这些问题。具体流程如下：
+
+# 触发条件：
+# 手动触发 (workflow_dispatch)：通过 GitHub Actions 界面手动启动工作流。
+# 定时触发 (schedule)：每天的凌晨 1:30（UTC）自动触发工作流。
+# 工作流程：
+# 获取未确认的 issue 列表：
+
+# 脚本通过 GitHub API 获取 ant-design/ant-design 仓库中标签为 unconfirmed 的 未确认的 issue。
+# 只筛选 7天内创建的 open 状态的 issue，并且排除掉与 PR 相关的 issue。
+# 格式化时间：
+
+# 使用 fromNow 函数计算每个 issue 距离当前的时间差，并格式化为类似“几分钟前”或“几天前”的方式。
+# 构建钉钉消息内容：
+
+# 构建一个包含所有未确认 issue 的 Markdown 格式内容，包括每个 issue 的标题、链接和创建时间差。
+# 消息的标题是 "近 7 天未确认的 issue"，并在末尾添加激励信息：“快去帮忙处理吧，社区需要你的帮助！”
+# 发送消息到钉钉：
+
+# 使用钉钉机器人的 API，将生成的 Markdown 格式消息发送到指定的钉钉群组。
+# 通过 DINGDING_BOT_TOKEN 环境变量来获取钉钉机器人访问令牌，确保安全发送。
 name: Issue Schedule
 on:
-    workflow_dispatch:
-    schedule:
-      - cron: '30 1 * * *'
+  # workflow_dispatch:
+  # schedule:
+  #   - cron: '30 1 * * *'
+  workflow_dispatch:
+  schedule: []
 
 jobs:
   send-message:
@@ -11,8 +34,8 @@ jobs:
       - name: Send Unconfirmed Issues to DingTalk
         uses: actions/github-script@v7
         env:
-            DINGDING_BOT_TOKEN: ${{ secrets.DINGDING_BOT_COLLABORATOR_TOKEN }}
-            actionTitle: 近 7 天未确认的 issue
+          DINGDING_BOT_TOKEN: ${{ secrets.DINGDING_BOT_COLLABORATOR_TOKEN }}
+          actionTitle: 近 7 天未确认的 issue
         with:
           script: |
             const dingdingTokenKey = process.env.DINGDING_BOT_TOKEN;

@@ -1,8 +1,23 @@
+# 这个 GitHub Actions 工作流脚本的目的是自动处理和管理 GitHub 仓库中的 issue。当有人提交新的 issue 时，它会执行以下任务：
+
+# 检查用户权限：首先检查提交 issue 的用户是否有足够的权限（需要写权限）。
+
+# 添加标签：如果提交的 issue 没有满足格式要求，脚本会自动给该 issue 添加 "unconfirmed" 标签，表示该问题尚未确认。
+
+# 检查无效问题：如果 issue 不符合要求，脚本会自动关闭该 issue 并添加 "Invalid" 标签，同时给用户发送一条信息，提醒他们通过正确的格式重新提交问题。
+
+# 检查是否涉及官网问题：如果 issue 内容涉及 Ant Design 官网相关的问题（如无法访问），脚本会自动回复并提供一些解决方法，包括国内镜像和访问工具。
+
+# 检查是否与 IE 相关：如果问题与 Internet Explorer（IE）浏览器相关，脚本会给该 issue 添加相应的标签，并通知用户该问题仅支持 IE11 及以上版本。
+
+# 通知钉钉群：当一个新 issue 被创建时，脚本会向钉钉群发送通知，告诉群成员有新的 issue 提交。
 name: Issue Open Check
 
 on:
+  # issues:
+  #   types: [opened]
   issues:
-    types: [opened]
+    types: []
 
 permissions:
   contents: read
@@ -10,9 +25,9 @@ permissions:
 jobs:
   issue-open-check:
     permissions:
-      contents: read  # for visiky/dingtalk-release-notify to get latest release
-      issues: write  # for actions-cool/issues-helper to update issues
-      pull-requests: write  # for actions-cool/issues-helper to update PRs
+      contents: read # for visiky/dingtalk-release-notify to get latest release
+      issues: write # for actions-cool/issues-helper to update issues
+      pull-requests: write # for actions-cool/issues-helper to update PRs
     runs-on: ubuntu-latest
     steps:
       - uses: actions-cool/check-user-permission@v2

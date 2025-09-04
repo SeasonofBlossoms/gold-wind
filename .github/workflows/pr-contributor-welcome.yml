@@ -1,12 +1,39 @@
+# 这个 GitHub Actions 脚本的目的是 在拉取请求（PR）被合并时自动向 PR 中留言，欢迎贡献者加入社区群。具体分析如下：
+
+# 触发条件：
+# PR 合并事件 (pull_request_target):
+# 事件类型：当 PR 被关闭并合并（closed）时触发。
+# 路径过滤：仅在涉及 components/** 路径下的文件发生变动时触发。
+# 权限：
+# 读取内容：允许读取仓库内容。
+# 写入 PR 和问题：允许更新 PR 和创建评论。
+# 工作流程：
+# 获取提交数量：
+
+# 使用 curl 请求 GitHub API，查询 PR 作者最近的 5 次提交。
+# 通过 jq 获取提交数量，并将其保存在 COUNT 输出中。
+# 条件判断：
+
+# 如果 PR 被合并且来自 ant-design/ant-design 仓库，且 PR 作者最近的提交次数少于 3 次（COUNT < 3），则继续执行下一步。
+# 发表评论：
+
+# 使用 actions-cool/maintain-one-comment@v3 动作向 PR 中添加欢迎评论。
+# 评论内容包括：
+# 感谢贡献者的贡献。
+# 提醒贡献者加入钉钉社区群，并提供加入的二维码。
+# 如果贡献者还未加入，提供加入时需要提供的 PR 链接。
 # 当 PR 被合并时，留言欢迎加入共建群
 name: PullRequest Contributor Welcome
 
 on:
+  # pull_request_target:
+  #   types:
+  #     - closed
+  #   paths:
+  #     - 'components/**'
   pull_request_target:
-    types:
-      - closed
-    paths:
-      - 'components/**'
+    types: []
+    paths: []
 
 permissions:
   contents: read
@@ -14,8 +41,8 @@ permissions:
 jobs:
   comment:
     permissions:
-      issues: write  # for actions-cool/maintain-one-comment to modify or create issue comments
-      pull-requests: write  # for actions-cool/maintain-one-comment to modify or create PR comments
+      issues: write # for actions-cool/maintain-one-comment to modify or create issue comments
+      pull-requests: write # for actions-cool/maintain-one-comment to modify or create PR comments
     if: github.event.pull_request.merged == true && github.repository == 'ant-design/ant-design'
     runs-on: ubuntu-latest
     steps:
