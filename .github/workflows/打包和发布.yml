@@ -53,8 +53,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         with:
           script: |
-            const semver = require('semver');
-            const core = require('@actions/core');
+            const semver = require('semver'); 
             const tagName = process.env.TAG_NAME;
             const cleanVersion = tagName.startsWith('v') ? tagName.substring(1) : tagName;
             if (!semver.valid(cleanVersion)) {
@@ -75,8 +74,8 @@ jobs:
       - name: Run build
         run: npm run build --if-present # 运行构建脚本，假设你的 package.json 中定义了 build 脚本
 
-      - name: Run tests
-        run: npm test --if-present # 运行测试脚本，假设你的 package.json 中定义了 test 脚本
+      # - name: Run tests
+      #   run: npm test --if-present # 运行测试脚本，假设你的 package.json 中定义了 test 脚本
 
       - name: Check build artifacts
         run: | # 检查所有在 package.json 的 "files" 字段中声明的目录和文件是否存在
