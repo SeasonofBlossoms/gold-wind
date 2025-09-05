@@ -7,15 +7,15 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    env: # 设置环境变量
-      NODE_VERSION: '20.x' # 定义 Node.js 版本
-      NPM_REGISTRY: 'https://registry.npmjs.org' # 定义 npm registry
+    env:
+      NODE_VERSION: '20.x'
+      NPM_REGISTRY: 'https://registry.npmjs.org'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 获取所有历史记录，便于生成 changelog
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,8 +23,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           registry-url: ${{ env.NPM_REGISTRY }}
+          cache-dependency-path: package.json # 添加这一行
 
-      # 修改缓存策略：基于 package.json 而不是 package-lock.json
+      # 以下步骤保持不变...
       - name: Get npm cache directory
         id: npm-cache-dir
         run: |
@@ -35,15 +36,14 @@ jobs:
         id: npm-cache
         with:
           path: |
-            ${{ steps.npm-cache-dir.outputs.dir }}
+            ${{ steps.npm-cache-dir.outputs.dir  }}
             node_modules
-          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-deps-${{ hashFiles('package.json') }}
+          key: ${{ runner.os  }}-node-${{ env.NODE_VERSION }}-deps-${{ hashFiles('package.json')  }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-deps-
+            ${{ runner.os  }}-node-${{ env.NODE_VERSION }}-deps-
 
-      # 修改安装命令：使用 npm install 而不是 npm ci
       - name: Install dependencies
-        if: steps.npm-cache.outputs.cache-hit != 'true'
+        if: steps.npm-cache.outputs.cache-hit  != 'true'
         run: npm install
 
       - name: Validate tag and extract version info
@@ -135,39 +135,39 @@ jobs:
             npm publish
           fi
 
-      - name: Generate changelog
-        run: |
-          if [ -f "node_modules/.bin/conventional-changelog" ] || npm list conventional-changelog-cli >/dev/null 2>&1; then
-            npx conventional-changelog -p angular -i CHANGELOG.md -s
-            echo "Changelog generated using conventional-changelog"
-          else
-            echo "conventional-changelog not available, creating basic changelog entry"
-            echo -e "# $(date +%Y-%m-%d)\n\n* Version ${{ steps.version-info.outputs.clean-version }} released.\n" >> CHANGELOG.md
-          fi
+      # - name: Generate changelog
+      #   run: |
+      #     if [ -f "node_modules/.bin/conventional-changelog" ] || npm list conventional-changelog-cli >/dev/null 2>&1; then
+      #       npx conventional-changelog -p angular -i CHANGELOG.md -s
+      #       echo "Changelog generated using conventional-changelog"
+      #     else
+      #       echo "conventional-changelog not available, creating basic changelog entry"
+      #       echo -e "# $(date +%Y-%m-%d)\n\n* Version ${{ steps.version-info.outputs.clean-version }} released.\n" >> CHANGELOG.md
+      #     fi
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          body: |
-            # Version ${{ steps.version-info.outputs.clean-version }} Released
-            ## Installation
-            ```bash
-            npm install your-package-name${{ steps.npm-tag.outputs.NPM_TAG != 'latest' && format('@{0}', steps.npm-tag.outputs.NPM_TAG) || '' }}
-            ```
-          body_path: CHANGELOG.md
-          files: | # 包含 package.json 的 "files" 字段中指定的所有目录和文件，以及 package.json 本身
-            BUG_VERSIONS.json
-            dist/**
-            es/**
-            lib/**
-            locale/**
-            package.json
-          draft: false
-          prerelease: ${{ steps.version-info.outputs.pre-release-type != '' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GOLD_WIND_TOKEN }} # 使用默认的 GOLD_WIND_TOKEN
+      # - name: Create GitHub Release
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     tag_name: ${{ github.ref_name }}
+      #     name: Release ${{ github.ref_name }}
+      #     body: |
+      #       # Version ${{ steps.version-info.outputs.clean-version }} Released
+      #       ## Installation
+      #       ```bash
+      #       npm install your-package-name${{ steps.npm-tag.outputs.NPM_TAG != 'latest' && format('@{0}', steps.npm-tag.outputs.NPM_TAG) || '' }}
+      #       ```
+      #     body_path: CHANGELOG.md
+      #     files: | # 包含 package.json 的 "files" 字段中指定的所有目录和文件，以及 package.json 本身
+      #       BUG_VERSIONS.json
+      #       dist/**
+      #       es/**
+      #       lib/**
+      #       locale/**
+      #       package.json
+      #     draft: false
+      #     prerelease: ${{ steps.version-info.outputs.pre-release-type != '' }}
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GOLD_WIND_TOKEN }} # 使用默认的 GOLD_WIND_TOKEN
 
       - name: Notify success
         if: success()
