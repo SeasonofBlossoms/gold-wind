@@ -1,0 +1,281 @@
+# 触发条件（on）：
+
+# push事件：针对master和feature分支
+# pull_request事件：针对master和feature分支
+# 并发控制（concurrency）：
+
+# 使用工作流名称和PR号（如果是PR事件）或引用（分支）作为分组
+# 当有新提交时，取消正在进行的相同工作流
+# 权限（permissions）：
+
+# 只授予读取仓库内容的权限（contents: read）
+# 作业（jobs）：
+
+# 有多个作业，包括lint、test-react-legacy、test-node、test-react-latest、test-react-latest-dist、upload-test-coverage、build、test-lib-es等。
+# 接下来，我们逐一解析每个作业：
+
+# 4.1 lint作业： - 运行在ubuntu-latest - 步骤：检出代码、安装Bun、使用Bun安装依赖、运行lint脚本
+
+# 4.2 test-react-legacy作业： - 矩阵策略：测试两个React版本（16和17）以及两个分片（1/2和2/2） - 步骤：安装依赖，根据矩阵中的React版本安装对应的React（16或17），然后运行测试（带覆盖率）
+
+# 4.3 test-node作业： - 运行Node环境下的测试
+
+# 4.4 test-react-latest作业： - 矩阵：模块为dom（虽然只有一个，但可能是为了扩展）和两个分片 - 步骤：运行测试（带覆盖率），然后将覆盖率数据保存为artifact
+
+# 4.5 test-react-latest-dist作业： - 需要build作业完成（needs: build） - 矩阵：测试dist和dist-min两个模块（即构建后的产物），并分片 - 步骤：恢复dist的缓存，然后分别测试dist和dist-min
+
+# 4.6 upload-test-coverage作业： - 需要test-react-latest作业完成 - 下载所有覆盖率artifact，合并后上传到Codecov
+
+# 4.7 build作业： - 步骤：安装依赖，缓存lib和es目录，运行编译（compile）和构建（dist），检查构建文件（test:dekko） - 如果是推送到master分支，则上传构建产物（dist, locale, es, lib）为artifact - 如果是ant-design/ant-design仓库的master分支推送，则将构建产物打包上传到阿里云OSS
+
+# 4.8 test-lib-es作业： - 矩阵：模块为lib和es，分片 - 步骤：恢复对应模块的缓存（如果是PR且模块为lib，则跳过缓存恢复？），编译（同样，PR且lib则跳过），然后运行测试
+
+# 注意：在test-lib-es作业中，对于lib模块，在PR事件中不会执行（通过if条件判断）。这是因为在PR中，lib可能还没有构建（因为构建在build作业中），而es和lib的构建是在build作业中完成的。所以，在PR中，test-lib-es作业只测试es模块，而不测试lib模块（因为lib模块可能还没有构建，或者构建了但不在同一个工作流中共享？）。而在非PR事件（例如推送到分支）中，会执行编译和测试。
+
+# 此外，整个工作流中使用了Bun作为运行时（安装依赖和运行脚本），这比传统的Node.js 更快。
+
+# 现在，我们根据用户要求，总结这个工作流的主要功能和特点，并注意格式要求（分点控制在5个以内，结构化）。
+
+# 我们可以将回答组织为以下几个部分：
+
+# 工作流概述：简要介绍这个工作流的目的和触发条件。
+# 主要作业及其功能：将作业分类，比如静态检查、测试（不同环境）、构建、覆盖率上传等。
+# 关键技术和优化：如并发控制、矩阵分片、缓存策略、条件执行等。
+# 构建产物处理：关于构建后上传artifact和OSS的处理。
+# 安全与权限：最小权限原则。
+# Origin Source
+# https://github.com/ant-design/ant-design/blob/79f566b7f8abb1012ef55b0d2793bfdf5595b85d/.github/workflows/test.yml
+name: ✅ test
+
+on:
+  push:
+    branches: [master, feature]
+  pull_request:
+    branches: [master, feature]
+
+# Cancel prev CI if new commit come
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run lint
+
+  ################################ Test ################################
+  test-react-legacy:
+    name: test-react-legacy
+    strategy:
+      matrix:
+        react: ['16', '17']
+        shard: [1/2, 2/2]
+    env:
+      REACT: ${{ matrix.react }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: install react 16
+        if: ${{ matrix.react == '16' }}
+        run: bun run bun-install-react-16
+      - name: install react 17
+        if: ${{ matrix.react == '17' }}
+        run: bun run bun-install-react-17
+      # dom test
+      - name: dom test
+        run: bun run test -- --maxWorkers=2 --shard=${{matrix.shard}} --coverage
+
+  test-node:
+    name: test-node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run test:node
+
+  test-react-latest:
+    name: test-react-latest
+    strategy:
+      matrix:
+        module: [dom]
+        shard: [1/2, 2/2]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      # dom test
+      - name: dom test
+        run: bun run test -- --maxWorkers=2 --shard=${{matrix.shard}} --coverage
+
+      - name: persist coverages
+        run: |
+          mkdir persist-coverage
+          mv coverage/coverage-final.json persist-coverage/react-test-${{matrix.module}}-${{strategy.job-index}}.json
+
+      - uses: actions/upload-artifact@v4
+        name: upload coverages
+        with:
+          name: coverage-artifacts-${{ matrix.module }}-${{ strategy.job-index }}
+          path: persist-coverage/
+
+  test-react-latest-dist:
+    name: test-react-latest-dist
+    strategy:
+      matrix:
+        module: [dist, dist-min]
+        shard: [1/2, 2/2]
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - name: restore cache from dist
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: dist-${{ github.sha }}
+
+      - name: dist-min test
+        if: ${{ matrix.module == 'dist-min' }}
+        run: bun run test -- --maxWorkers=2 --shard=${{matrix.shard}}
+        env:
+          LIB_DIR: dist-min
+
+      - name: dist test
+        if: ${{ matrix.module == 'dist' }}
+        run: bun run test -- --maxWorkers=2 --shard=${{matrix.shard}}
+        env:
+          LIB_DIR: dist
+
+  ############################ Test Coverage ###########################
+  upload-test-coverage:
+    name: test-coverage
+    runs-on: ubuntu-latest
+    needs: test-react-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: coverage-artifacts-*
+          merge-multiple: true
+          path: persist-coverage
+      - name: Merge Code Coverage
+        run: |
+          bunx nyc merge persist-coverage/ coverage/coverage-final.json
+          bunx nyc report --reporter text -t coverage --report-dir coverage
+          rm -rf persist-coverage
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v5
+        with:
+          # use own token to upload coverage reports
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  ########################### Compile & Test ###########################
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - name: cache lib
+        uses: actions/cache@v4
+        with:
+          path: lib
+          key: lib-${{ github.sha }}
+
+      - name: cache es
+        uses: actions/cache@v4
+        with:
+          path: es
+          key: es-${{ github.sha }}
+
+      - name: compile
+        run: bun run compile
+
+      - name: cache dist
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: dist-${{ github.sha }}
+
+      - name: dist
+        run: bun run dist
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          CI: 1
+
+      - name: check build files
+        run: bun run test:dekko
+
+      # Artifact build files
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        with:
+          name: build artifacts
+          path: |
+            dist
+            locale
+            es
+            lib
+
+      - name: zip builds
+        if: github.repository == 'ant-design/ant-design' && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          ALI_OSS_AK_ID: ${{ secrets.ALI_OSS_AK_ID }}
+          ALI_OSS_AK_SECRET: ${{ secrets.ALI_OSS_AK_SECRET }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          zip -r oss-artifacts.zip dist locale es lib
+          echo "🤖 Uploading"
+          node scripts/visual-regression/upload.js ./oss-artifacts.zip --ref=$HEAD_SHA
+
+  test-lib-es:
+    name: test lib/es module
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [lib, es]
+        shard: [1/2, 2/2]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - name: restore cache from ${{ matrix.module }}
+        # lib only run in master branch not in pull request
+        if: ${{ github.event_name != 'pull_request' || matrix.module != 'lib' }}
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.module }}
+          key: ${{ matrix.module }}-${{ github.sha }}
+
+      - name: compile
+        # lib only run in master branch not in pull request
+        if: ${{ github.event_name != 'pull_request' || matrix.module != 'lib' }}
+        run: bun run compile
+
+      - name: test
+        # lib only run in master branch not in pull request
+        if: ${{ github.event_name != 'pull_request' || matrix.module != 'lib' }}
+        run: bun run test -- --maxWorkers=2 --shard=${{matrix.shard}}
+        env:
+          LIB_DIR: ${{ matrix.module }}

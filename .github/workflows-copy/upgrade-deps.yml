@@ -1,0 +1,94 @@
+# 我们正在分析一个GitHub Actions工作流，名为"Upgrade Dependencies"。该工作流每天定时运行，目的是自动升级项目的依赖并创建Pull Request（PR）。以下是对该工作流的详细解析：
+
+# 工作流基本信息
+# 名称: Upgrade Dependencies
+# 触发方式: 通过cron表达式每天在UTC时间18:00（即北京时间次日凌晨2点）触发。
+# 执行条件: 仅当仓库为'ant-design/ant-design'且分支为'master'时运行。
+# 工作流结构
+# 作业名称: upgrade-deps
+# 运行环境: ubuntu-latest
+# 权限设置:
+# pull-requests: write: 允许创建PR（由peter-evans/create-pull-request使用）
+# contents: write: 允许向仓库推送代码（用于创建分支和提交）
+# 步骤:
+# 1. Checkout
+# 使用actions/checkout@v5检出代码，但只检出必要的文件（稀疏检出）:
+# .github（工作流文件）
+# .ncurc.js （npm-check-updates配置文件）
+# package.json （依赖清单）
+# 2. 设置Bun环境
+# 使用oven-sh/setup-bun@v2安装Bun（一个快速的JavaScript运行时）。
+# 3. 升级依赖
+# 步骤ID: upgrade
+# 执行命令:
+# 创建一个临时目录.tmp（如果不存在）。
+# 使用bunx npm-check-updates -u升级package.json 中的依赖版本，并将输出（包括错误）重定向到.tmp/upgrade-deps-logs.txt 。
+# 如果日志文件非空，则将其内容输出到控制台，并设置为步骤输出（steps.upgrade.outputs.logs ）。
+# 4. 创建Pull Request
+# 步骤ID: cpr
+# 使用peter-evans/create-pull-request@v7创建PR。
+# 参数配置:
+# token: 使用secrets.GITHUB_TOKEN（必须显式指定，不能使用默认值）。
+# assignees: 指定5位处理者（'afc163, yoyo837, Wxh16144, li-jia-nan, thinkasany'）。
+# title和commit-message: 固定为"chore: upgrade deps"。
+# body: PR描述，包含升级日志（通过上一步的输出获取）。
+# branch: 使用分支auto-upgrade-deps，并在PR创建后删除该分支（delete-branch: true）。
+# add-paths: 只提交package.json 的变更。
+name: Upgrade Dependencies
+
+on:
+  schedule:
+    - cron: '0 18 * * *' # every day at 18:00 UTC
+    # - timezone: Asia/Shanghai # not supported yet https://github.com/orgs/community/discussions/13454
+
+jobs:
+  upgrade-deps:
+    runs-on: ubuntu-latest
+    if: github.repository == 'ant-design/ant-design' && github.ref == 'refs/heads/master'
+    permissions:
+      pull-requests: write # for peter-evans/create-pull-request to create PRs
+      contents: write # for git push
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github
+            .ncurc.js
+            package.json
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: upgrade deps
+        id: upgrade
+        run: |
+          if [ ! -d .tmp ] ; then
+            mkdir .tmp
+          fi
+          $(bunx npm-check-updates -u > .tmp/upgrade-deps-logs.txt) 2>&1 || true
+          if [ -s .tmp/upgrade-deps-logs.txt ]; then
+            cat .tmp/upgrade-deps-logs.txt
+            echo "logs<<EOF" >> $GITHUB_OUTPUT
+            cat .tmp/upgrade-deps-logs.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: create pull request
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # Cannot be default!!!
+          assignees: 'afc163, yoyo837, Wxh16144, li-jia-nan, thinkasany'
+          title: 'chore: upgrade deps'
+          commit-message: 'chore: upgrade deps'
+          body: |
+            Upgrade dependencies
+
+            ```
+            ${{ steps.upgrade.outputs.logs }}
+            ```
+          branch: auto-upgrade-deps
+          delete-branch: true
+          add-paths: |
+            package.json

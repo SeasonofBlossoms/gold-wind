@@ -1,0 +1,27 @@
+# 这个 GitHub Actions 工作流程 (name: 🆇 Release to X) 的主要功能是：当在仓库中创建符合特定条件的新标签时，自动向 Twitter (X) 发布一条推文，宣布 Ant Design 库的新版本发布。
+# 监听标签创建： 当有人在仓库中推送一个新的标签时触发。
+# 过滤非正式版本： 只处理标签名不包含 'alpha' 的标签（即正式发布版本）。
+# 自动化发布公告： 利用配置好的 Twitter API 凭证，自动向关联的 Twitter (X) 账号发送一条格式化的推文。
+# 推文内容：
+# 宣布 Ant Design (antd) 发布了新版本 (版本号取自标签名)。
+# 包含指向该版本详细 Release Notes 的 GitHub 链接。
+# 使用表情符号 (🤖✨🎊) 增加可读性和吸引力。
+# 关键点
+name: 🆇 Release to X
+
+on: create
+
+jobs:
+  tweet:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.ref_type == 'tag' && !contains(github.event.ref, 'alpha') }}
+    steps:
+      - name: Tweet
+        uses: nearform-actions/github-action-notify-twitter@master
+        with:
+          message: |
+            🤖 Ant Design just released antd@${{ github.event.ref }} ✨🎊✨ Check out the full release note: https://github.com/ant-design/ant-design/releases/tag/${{ github.event.ref }}
+          twitter-app-key: ${{ secrets.TWITTER_API_KEY }}
+          twitter-app-secret: ${{ secrets.TWITTER_API_SECRET }}
+          twitter-access-token: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          twitter-access-token-secret: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}

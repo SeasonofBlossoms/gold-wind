@@ -1,0 +1,36 @@
+# 这个工作流主要用于监控项目打包后的大小，防止因为新增依赖或代码导致打包文件过大。它会在每次PR打开或更新时运行，并利用ant-design/size-limit-action来：
+
+# 运行构建命令（bun run dist）生成生产包。
+# 使用size-limit工具（或类似机制）分析生成的文件大小。
+# 将当前PR的包大小与基准（如主分支）进行比较。
+# 在PR上添加评论，显示包大小的变化（增加或减少），并警告如果增加超过一定阈值。
+name: 📦 Size Limit
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  size:
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - name: size-limit
+        uses: ant-design/size-limit-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          package_manager: bun
+          build_script: dist
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+          PRODUCTION_ONLY: 1
+          CI_JOB_NUMBER: 1

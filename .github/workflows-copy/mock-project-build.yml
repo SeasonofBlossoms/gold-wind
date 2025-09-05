@@ -1,0 +1,92 @@
+# 这个 GitHub Actions 脚本的目的是 自动化构建一个包含 Umi、Ant Design 和 Dumi 的项目，并定期执行此构建任务。具体功能如下：
+
+# 触发条件：
+# 手动触发 (workflow_dispatch)：允许用户通过 GitHub Actions 手动启动工作流。
+# 定时触发 (schedule)：按照 Cron 表达式 */30 * * * * 设置，意味着每 30 分钟自动触发一次工作流。
+# 工作流程：
+# 并行取消 (concurrency)：
+
+# 在每次有新的提交时，取消之前正在运行的 CI 流程，保证不会有多个相同的构建任务同时进行。
+# 构建项目：
+
+# 在 ant-design/ant-design 仓库中执行构建任务。
+# 通过 checkout 步骤，获取最新的代码。
+# 使用 oven-sh/setup-bun 设置 Bun 作为构建工具。
+# 使用 actions/cache 缓存 yarn.lock 文件，加速后续的构建过程。
+# 运行构建脚本：
+
+# 通过 Run Script 步骤，执行 ci-mock-project-build.sh 脚本进行构建。
+# 处理构建失败：
+
+# 如果构建失败，会将当前的 yarn.lock 文件重命名为 .failed 后缀的文件。
+# 通过 actions/cache/restore 恢复之前成功的 yarn.lock 文件，作为 success.lock。
+# 使用 bunx diff-yarn-lock 工具比较失败和成功的 yarn.lock 文件，并生成构建差异报告。
+# 通知失败：
+
+# 如果构建失败，使用 actions-cool/ci-notice 发送失败通知到钉钉群组，通知内容包括构建失败的相关信息，并退出任务，触发 CI 失败逻辑。
+# Build a cron job to create a umi project which use antd and dumi, and then build it.
+name: Mock Project Build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
+
+# Cancel prev CI if new commit come
+concurrency:
+  group: unique
+  cancel-in-progress: true
+
+jobs:
+  pr-check-ci:
+    if: github.repository == 'ant-design/ant-design'
+    runs-on: ubuntu-latest
+    name: Build Project
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/cache@v4
+        with:
+          path: ~tmpProj/yarn.lock
+          key: primes-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: mock-proj-lock-file
+
+      - name: Run Script
+        run: bash ./scripts/ci-mock-project-build.sh
+
+      ##################################################################
+      ##                        Diff Lock File                        ##
+      ##################################################################
+      - name: Rename failed lock file
+        if: ${{ failure() }}
+        run: mv ~tmpProj/yarn.lock ~tmpProj/yarn.lock.failed
+
+      - name: Download success lock file as `success.lock`
+        if: ${{ failure() }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~tmpProj/yarn.lock
+          key: primes-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: mock-proj-lock-file
+
+      - name: ls tmpProj
+        if: ${{ failure() }}
+        run: ls ~tmpProj
+
+      - name: 🎨 Diff Report
+        if: ${{ failure() }}
+        run: bunx diff-yarn-lock --source=~tmpProj/yarn.lock --target=~tmpProj/yarn.lock.failed
+
+      - uses: actions-cool/ci-notice@v1
+        if: ${{ failure() }}
+        with:
+          notice-types: dingding
+          # Exit directly with non-zero to trigger the failure logic of ci-notice.
+          ci: |
+            echo "❌ CI Mock Project Build Failed"
+            exit 1
+          dingding-token: ${{ secrets.DINGDING_BOT_COLLABORATOR_TOKEN }}
+          notice-title: CI Mock Project Build Failed

@@ -1,0 +1,67 @@
+# 这些 GitHub Actions 脚本看起来是针对 PR 的自动化管理流程，目的是提升代码审查的效率和准确性。每个流程都有不同的触发条件和操作步骤：
+
+# 1. PR Open Check
+# 触发条件：当 PR 被打开、编辑、重新打开或同步时触发。
+# 操作步骤：
+# 拒绝合并：如果 PR 提及的 Issue 需要核心团队或设计师的确认，拒绝合并该 PR。
+# 检查 Changelog：确保 PR 中包含变更日志，如果没有填写，会自动提醒。
+# 添加审阅者和标签：为 PR 指定审阅者并添加标签，帮助团队成员更好地跟踪 PR 状态。
+# 2. PR Open Notify
+# 触发条件：当 PR 被打开时触发。
+# 操作步骤：
+# 钉钉通知：向钉钉群组发送关于新 PR 的通知，提醒团队成员进行代码审查。
+# 3. Preview Build
+# 触发条件：当 PR 被创建、同步或重新打开时触发。
+# 操作步骤：
+# 构建预览站点：构建预览站点，检查 PR 是否符合预期。
+# E2E 测试：运行端到端测试，确保站点的功能正常。
+# 上传工件：将构建好的站点上传，以便进一步查看和审查。
+# 保存 PR 编号：保存 PR 编号，以供未来工作流使用。
+# Each PR will build preview site that help to check code is work as expect.
+
+name: Preview Build
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Cancel prev CI if new commit come
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-site:
+    name: build preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: bun run site
+        id: site
+        run: bun run site
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+      - name: run e2e test
+        run: bun run test:site
+      - name: upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: _site/
+          retention-days: 5
+      # Upload PR id for next workflow use
+      - name: Save PR number
+        if: ${{ always() }}
+        run: echo ${{ github.event.number }} > ./pr-id.txt
+
+      - name: Upload PR number
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr
+          path: ./pr-id.txt

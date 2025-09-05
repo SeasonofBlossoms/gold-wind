@@ -1,0 +1,48 @@
+# 触发条件：
+
+# 当推送到特定分支（master, gh-pages, feature, 2.x-stable, 3.x-stable, 4.x-stable）时
+# 当创建事件发生时（注意：创建事件包括分支和标签的创建，但这里通过条件进一步限定）
+# 手动触发（workflow_dispatch）
+# 权限设置：
+
+# 工作流需要读取仓库内容的权限（contents: read）
+# 但在作业中，mirror作业的权限被设置为contents: none，这是因为镜像同步操作不需要访问仓库内容，只需要使用SSH密钥进行推送。
+# 作业（job）说明：
+
+# 作业名为mirror，在ubuntu-latest环境中运行。
+# 条件：只有仓库是'ant-design/ant-design'时才运行（避免在fork上运行）
+# 步骤（steps）： 步骤名：mirror 设置：continue-on-error: true 表示即使这一步失败，工作流也不会失败（避免因镜像同步问题影响主流程） 条件：只有当事件是推送事件，或者是创建标签事件，或者是手动触发时才运行。注意：创建事件中我们只关心标签创建（github.event.ref_type == 'tag'），因为分支创建已经在push事件中覆盖了。 使用动作：wearerequired/git-mirror-action@v1 环境变量：设置SSH_PRIVATE_KEY为存储在GitHub仓库secrets中的GITEE_SSH_PRIVATE_KEY（用于Gitee仓库的认证） 参数（with）： source-repo: 源仓库（GitHub上的ant-design仓库） destination-repo: 目标仓库（Gitee上的ant-design仓库）
+# 总结： 这个工作流用于将GitHub上的ant-design仓库的特定分支（包括master, gh-pages, feature和几个稳定分支）以及新创建的标签同步到Gitee镜像仓库。这样做的目的可能是为了给国内用户提供更快的访问速度（因为Gitee在国内访问速度通常比GitHub快）。
+name: 🔀 Sync mirror to Gitee
+
+on:
+  push:
+    branches:
+      - master
+      - gh-pages
+      - feature
+      - 2.x-stable
+      - 3.x-stable
+      - 4.x-stable
+  create:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    permissions:
+      contents: none
+    runs-on: ubuntu-latest
+    if: github.repository == 'ant-design/ant-design'
+    steps:
+      - name: mirror
+        continue-on-error: true
+        if: github.event_name == 'push' || (github.event_name == 'create' && github.event.ref_type == 'tag') || github.event_name == 'workflow_dispatch'
+        uses: wearerequired/git-mirror-action@v1
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.GITEE_SSH_PRIVATE_KEY }}
+        with:
+          source-repo: 'git@github.com:ant-design/ant-design.git'
+          destination-repo: 'git@gitee.com:ant-design/ant-design.git'

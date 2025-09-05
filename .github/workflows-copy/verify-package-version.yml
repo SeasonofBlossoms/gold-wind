@@ -1,0 +1,44 @@
+# 我们正在分析一个GitHub Actions工作流，其名称是"Verify Package Version"。这个工作流的主要目的是在特定类型的pull request事件发生时，验证包版本信息是否符合要求。
+
+# 首先，我们来看触发条件： on: pull_request: types: [opened, edited, reopened, synchronize, ready_for_review] 这表示当pull request被打开(open)、编辑(edited)、重新打开(reopened)、同步更新(synchronize)或标记为准备审查(ready_for_review)时，工作流会被触发。
+
+# 接下来，工作流中定义了一个名为"verify"的job，它仅在pull request的标题中包含'changelog'或'release'时才会运行（通过if条件判断）： if: contains(github.event.pull_request.title, 'changelog') || contains(github.event.pull_request.title, 'release')
+
+# 这个job包含两个步骤：
+
+# 使用actions/checkout@v5检出代码库。
+# 使用actions-cool/verify-package-version@v1这个action来验证包版本。
+# 在验证步骤中，配置了三个参数：
+
+# title-include-content: docs
+# title-include-version: true
+# open-comment: true
+# 根据这些配置，我们可以推断这个工作流的作用是：
+
+# 当PR标题包含"changelog"或"release"时触发（通常表示这是一个与版本更新相关的PR）。
+# 使用verify-package-version这个工具来验证PR标题中是否包含了文档内容（可能是要求包含'docs'字样）和版本号。
+# 如果验证失败，可能会在PR上添加评论提示（open-comment: true）。
+name: Verify Package Version
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+      pull-requests: write # for actions-cool/verify-package-version to comment on PR
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.title, 'changelog') || contains(github.event.pull_request.title, 'release')
+    steps:
+      - uses: actions/checkout@v5
+      - name: verify-version
+        uses: actions-cool/verify-package-version@v1
+        with:
+          title-include-content: docs
+          title-include-version: true
+          open-comment: true

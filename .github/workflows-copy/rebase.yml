@@ -1,0 +1,40 @@
+# 这段代码是一个 GitHub Actions 工作流配置，用于自动化地执行 GitHub 上的 "rebase" 操作。具体来说，它监控某个 issue 下的评论，当评论内容包含关键词 /rebase 或 \rebase 时，自动触发一个 rebase 操作。
+
+# 主要步骤：
+# 触发条件 (on)：当在某个 issue 中创建评论时，且评论中包含 /rebase 或 \rebase 字符串时，自动触发 rebase 操作。
+
+# 权限设置 (permissions)：
+
+# 读取内容（contents: read）：允许读取内容，如仓库文件。
+# 写入内容（contents: write）：允许执行代码更改，例如将变基后的代码推送到仓库。
+# 读取 PR（pull-requests: read）：允许读取与 pull request 相关的信息。
+# 操作步骤 (steps)：
+
+# 使用 actions/checkout@v5 来检查出当前的仓库代码，确保 GitHub Actions 能访问到仓库中的文件。
+# 使用 cirrus-actions/rebase@1.8 来执行自动变基操作，确保 pull request 或分支始终保持最新的状态。
+# GITHUB_TOKEN 用于身份验证，确保在执行操作时具有正确的权限。
+name: Automatic Rebase
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  rebase:
+    permissions:
+      contents: write # for cirrus-actions/rebase to push code to rebase
+      pull-requests: read # for cirrus-actions/rebase to get info about PR
+    name: Rebase
+    if: github.event.issue.pull_request != '' && (contains(github.event.comment.body, '/rebase') || contains(github.event.comment.body, '\rebase'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Automatic Rebase
+        uses: cirrus-actions/rebase@1.8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

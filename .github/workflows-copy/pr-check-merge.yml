@@ -1,0 +1,45 @@
+# 这个 GitHub Actions 脚本的目的是 在拉取请求（PR）被打开时进行检查，并提醒开发者按照正确的流程进行分支合并。下面是脚本的详细分析：
+
+# 触发条件：
+# 拉取请求目标事件 (pull_request_target):
+# 事件类型：只在 PR 被创建（opened）时触发。
+# 权限：
+# 读取内容：脚本允许读取仓库内容。
+# 写入 PR 和问题：脚本有权限更新 PR 和问题，以便执行提醒和评论操作。
+# 工作流程：
+# PR 合并检查：
+
+# 脚本首先会检查 PR 的头部分支（head.ref），只有当它的值为 next、feature 或 master 时才会继续执行。
+# 此外，脚本还检查创建 PR 的用户是否是 ant-design（github.event.pull_request.head.user.login == 'ant-design'）。只有来自该用户的 PR 才会被处理。
+# 创建评论：
+
+# 使用 actions-cool/issues-helper@v3 动作向 PR 中添加评论，提醒 PR 创建者。
+# 评论内容如下：
+# 提醒 PR 创建者，当前 PR 是分支间的互相合并。
+# 强调要使用 BranchAutoMerge 标签来进行自动合并。
+# 警告不要使用 Squash 合并方式，以免产生问题。
+name: PR Check Merge
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-check-merge:
+    permissions:
+      issues: write # for actions-cool/issues-helper to update issues
+      pull-requests: write # for actions-cool/issues-helper to update PRs
+    runs-on: ubuntu-latest
+    if: (github.event.pull_request.head.ref == 'next' || github.event.pull_request.head.ref == 'feature' || github.event.pull_request.head.ref == 'master') && github.event.pull_request.head.user.login == 'ant-design'
+    steps:
+      - uses: actions-cool/issues-helper@v3
+        with:
+          actions: create-comment
+          issue-number: ${{ github.event.number }}
+          body: |
+            Hi @${{ github.event.pull_request.user.login }}。
+
+            **请注意**，当前 PR 是分支间的互相合并，请使用 `BranchAutoMerge` 标签来进行自动合并。切记**不要、不要、不要使用 `Squash`**。

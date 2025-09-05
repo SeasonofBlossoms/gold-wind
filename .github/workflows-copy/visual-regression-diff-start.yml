@@ -1,0 +1,42 @@
+# 触发器：pull_request_target事件，在PR被打开（opened）、同步更新（synchronize）或重新打开（reopened）时触发，且针对特定分支（master, feature, next）。
+# 使用pull_request_target事件的原因：这个事件允许工作流访问PR的源代码和仓库的secrets，但需要特别注意安全性。用户强调“千万不要做checkout或npm install”，因为这会带来安全风险（恶意PR可能执行危险代码）。
+# 工作流只有一个作业（job）：“start visual-regression diff”，运行在Ubuntu最新环境。
+# 作业只有一个步骤：使用actions-cool/maintain-one-comment@v3这个Action来更新PR评论。
+# 评论内容：显示一个正在构建的消息，包括一个图片（占位符或进度指示图）和一个特定的注释标记<!-- VISUAL_DIFF_REGRESSION_HOOK -->。这个标记的作用是让后续的评论更新可以定位到这个评论（而不是新建评论），从而保持PR界面的整洁。
+# When `visual-regression-diff-build` start. Leave a message on the PR
+#
+# 🚨🚨🚨 Important 🚨🚨🚨
+# Never do any `checkout` or `npm install` action!
+# `pull_request_target` will enable PR to access the secrets!
+
+name: 👀 Visual Regression Diff Start
+
+on:
+  pull_request_target:
+    branches: [master, feature, next]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  visual-regression-diff-start:
+    permissions:
+      issues: write # for actions-cool/maintain-one-comment to modify or create issue comments
+      pull-requests: write # for actions-cool/maintain-one-comment to modify or create PR comments
+    name: start visual-regression diff
+    runs-on: ubuntu-latest
+    steps:
+      - name: update status comment
+        uses: actions-cool/maintain-one-comment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            ## 👁 Visual-Regression Diff Building... ⏳
+
+            > This PR is under visual-regression-diff building, please wait for the result.
+
+            <img src="https://github.com/ant-design/ant-design/assets/507615/5d52d8a2-f74e-4159-9792-c705b7bc1744" width="300" />
+
+            <!-- VISUAL_DIFF_REGRESSION_HOOK -->
+          body-include: <!-- VISUAL_DIFF_REGRESSION_HOOK -->

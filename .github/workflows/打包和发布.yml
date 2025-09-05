@@ -1,0 +1,164 @@
+name: Build and Publish
+
+on:
+  push:
+    tags: ['v*', '*-rc.*', '*-beta.*', '*-alpha.*'] # 只在打标签时触发
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    env: # 设置环境变量
+      NODE_VERSION: '20.x' # 定义 Node.js 版本
+      NPM_REGISTRY: 'https://registry.npmjs.org' # 定义 npm  registry
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取所有历史记录，便于生成 changelog
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: ${{ env.NPM_REGISTRY }}
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            npm-
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+
+      - name: Validate tag and extract version info
+        uses: actions/github-script@v7
+        id: version-info
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        with:
+          script: |
+            const semver = require('semver');
+            const core = require('@actions/core');
+            const tagName = process.env.TAG_NAME;
+            const cleanVersion = tagName.startsWith('v') ? tagName.substring(1) : tagName;
+            if (!semver.valid(cleanVersion)) {
+              core.setFailed(`Error: Tag ${tagName} is not a valid semantic version. Valid examples: v1.0.0, 2.1.4, v1.0.0-rc.1`);
+            }
+            const prerelease = semver.prerelease(cleanVersion);
+            const preReleaseType = prerelease ? prerelease[0] : '';
+            core.setOutput('tag-name', tagName);
+            core.setOutput('clean-version', cleanVersion);
+            core.setOutput('pre-release-type', preReleaseType);
+            console.log(`Validated tag: ${tagName}`);
+            console.log(`Clean version: ${cleanVersion}`);
+            console.log(`Pre-release type: ${preReleaseType || 'none'}`);
+
+      - name: Update package.json version
+        run: npm version ${{ steps.version-info.outputs.clean-version }} --no-git-tag-version --allow-same-version --no-commit-hooks
+
+      - name: Run build
+        run: npm run build --if-present # 运行构建脚本，假设你的 package.json 中定义了 build 脚本
+
+      - name: Run tests
+        run: npm test --if-present # 运行测试脚本，假设你的 package.json 中定义了 test 脚本
+
+      - name: Check build artifacts
+        run: | # 检查所有在 package.json 的 "files" 字段中声明的目录和文件是否存在
+          REQUIRED_ARTIFACTS=("BUG_VERSIONS.json" "dist" "es" "lib" "locale")
+          MISSING_ARTIFACTS=()
+          for artifact in "${REQUIRED_ARTIFACTS[@]}"; do
+            if [ ! -e "$artifact" ]; then
+              MISSING_ARTIFACTS+=("$artifact")
+            fi
+          done
+          if [ ${#MISSING_ARTIFACTS[@]} -ne 0 ]; then
+            echo "Error: The following required build artifacts are missing:"
+            printf '%s\n' "${MISSING_ARTIFACTS[@]}"
+            exit 1
+          fi
+          echo "All required build artifacts are present:"
+          for artifact in "${REQUIRED_ARTIFACTS[@]}"; do
+            if [ -d "$artifact" ]; then
+              echo "- Directory '$artifact' exists ($(find "$artifact" -type f | wc -l) files)"
+            elif [ -f "$artifact" ]; then
+              echo "- File '$artifact' exists ($(wc -l < "$artifact") lines)"
+            fi
+          done
+
+      - name: Determine npm distribution tag
+        id: npm-tag
+        run: |
+          PRE_RELEASE_TYPE="${{ steps.version-info.outputs.pre-release-type }}"
+          if [ -n "$PRE_RELEASE_TYPE" ]; then
+            case "$PRE_RELEASE_TYPE" in
+              alpha*)
+                echo "NPM_TAG=alpha" >> $GITHUB_OUTPUT
+                ;;
+              beta*)
+                echo "NPM_TAG=beta" >> $GITHUB_OUTPUT
+                ;;
+              rc*)
+                echo "NPM_TAG=rc" >> $GITHUB_OUTPUT
+                ;;
+              *)
+                echo "NPM_TAG=${PRE_RELEASE_TYPE:0:20}" >> $GITHUB_OUTPUT
+                ;;
+            esac
+          else
+            echo "NPM_TAG=latest" >> $GITHUB_OUTPUT
+          fi
+          echo "Using npm tag: $NPM_TAG"
+
+      - name: Publish to npm
+        run: | # 在项目根目录发布，npm 会根据 package.json 中的 "files" 字段决定包含哪些文件
+          echo "Publishing version ${{ steps.version-info.outputs.clean-version }} to npm with tag: ${{ steps.npm-tag.outputs.NPM_TAG }}"
+          npm config set //registry.npmjs.org/:_authToken ${{ secrets.NPM_TOKEN }}
+          if [ "${{ steps.npm-tag.outputs.NPM_TAG }}" != "latest" ]; then
+            npm publish --tag ${{ steps.npm-tag.outputs.NPM_TAG }}
+          else
+            npm publish
+          fi
+
+      - name: Generate changelog
+        run: |
+          if [ -f "node_modules/.bin/conventional-changelog" ] || npm list conventional-changelog-cli >/dev/null 2>&1; then
+            npx conventional-changelog -p angular -i CHANGELOG.md -s
+            echo "Changelog generated using conventional-changelog"
+          else
+            echo "conventional-changelog not available, creating basic changelog entry"
+            echo -e "# $(date +%Y-%m-%d)\n\n* Version ${{ steps.version-info.outputs.clean-version }} released.\n" >> CHANGELOG.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            # Version ${{ steps.version-info.outputs.clean-version }} Released
+            ## Installation
+            ```bash
+            npm install your-package-name${{ steps.npm-tag.outputs.NPM_TAG != 'latest' && format('@{0}', steps.npm-tag.outputs.NPM_TAG) || '' }}
+            ```
+          body_path: CHANGELOG.md
+          files: | # 包含 package.json 的 "files" 字段中指定的所有目录和文件，以及 package.json 本身
+            BUG_VERSIONS.json
+            dist/**
+            es/**
+            lib/**
+            locale/**
+            package.json
+          draft: false
+          prerelease: ${{ steps.version-info.outputs.pre-release-type != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 使用默认的 GITHUB_TOKEN
+
+      - name: Notify success
+        if: success()
+        run: |
+          echo "🎉 Successfully published version ${{ steps.version-info.outputs.clean-version }} to npm with tag: ${{ steps.npm-tag.outputs.NPM_TAG }}"

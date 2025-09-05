@@ -1,0 +1,139 @@
+# 我们正在分析一个名为“Visual Regression Persist Finish”的GitHub Actions工作流。这个工作流的主要作用是在主分支（master）或其他重要分支（如feature、next）上发生push事件后，将UI测试产生的图像快照持久化存储，这些快照将作为后续视觉回归测试的基准。
+
+# 工作流结构分析：
+
+# 触发条件：当名为“👁️ Visual Regression Persist Start”的工作流完成时触发（workflow_run事件）。
+# 两个主要工作： a. upstream-workflow-summary：分析上游工作流的执行结果，特别是名为'test image'的任务状态。 b. persist-image-snapshots：如果上游工作流成功，则下载生成的图像快照工件（artifact）并上传到阿里云OSS。
+# 现在我们来详细解析每个部分：
+
+# 一、上游工作流状态分析（upstream-workflow-summary）
+
+# 使用github-script获取指定工作流运行（workflow_run）的所有作业（jobs）状态。
+# 将作业状态汇总为一个对象，键为作业名称，值为作业结论（conclusion）。
+# 特别关注名为'test image'的作业状态，将其成功或失败状态设置为输出（outputs）： build-success: 如果'test image'作业成功则为true build-failure: 如果'test image'作业失败则为true
+# 二、持久化图像快照（persist-image-snapshots）
+
+# 依赖于upstream-workflow-summary作业的结果。
+# 步骤：
+# 检出代码：使用触发此工作流运行的提交SHA或分支。
+# 下载名为'visual-regression-ref'的工件：该工件包含一个标识符（可能是分支名或SHA），存储到./tmp目录。
+# 从下载的文件中提取标识符，并设置为作业输出（id: visual_regression）。
+# 如果上游工作流成功（build-success为true），则下载名为'image-snapshots'的工件（包含图像快照的压缩包）。
+# 将图像快照和标识符文件上传到OSS：
+# 条件：仅当仓库为'ant-design/ant-design'，触发事件为'push'，且分支为'master'、'feature'或'next'时执行。
+# 使用阿里云OSS的Node.js SDK（ali-oss）进行上传。
+# 上传两个文件： a. imageSnapshots.tar.gz ：以触发工作流的提交SHA作为引用（ref）上传。 b. visual-regression-ref.txt ：以触发工作流的分支名作为引用上传。
+# 关键点：
+
+# 安全性：使用secrets存储OSS的访问密钥（ALI_OSS_AK_ID和ALI_OSS_AK_SECRET）。
+# 效率：只在上游工作流成功时才下载和上传图像快照。
+# 精准存储：将图像快照与特定提交关联，而将引用文件（visual-regression-ref.txt ）与分支关联，这样在后续的PR测试中可以获取该分支最新的快照引用。
+# Each `push on master` will persist image-snapshots that used as compare target in visual regression.
+
+name: 👁️ Visual Regression Persist Finish
+
+on:
+  workflow_run:
+    workflows: [👁️ Visual Regression Persist Start]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-workflow-summary:
+    name: upstream workflow summary
+    runs-on: ubuntu-latest
+    outputs:
+      jobs: ${{ steps.persist_start_job_status.outputs.result }}
+      build-success: ${{ steps.persist_start_job_status.outputs.build-success }}
+      build-failure: ${{ steps.persist_start_job_status.outputs.build-failure }}
+    steps:
+      - name: summary jobs status
+        uses: actions/github-script@v7
+        id: persist_start_job_status
+        with:
+          script: |
+            const response = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }},
+            });
+
+            // { [name]: [conclusion] }, e.g. { 'test image': 'success' }
+            const jobs = (response.data?.jobs ?? []).reduce((acc, job) => {
+              if(job?.status === 'completed' && 'name' in job && 'conclusion' in job) {
+                acc[job.name] = job.conclusion;
+              }
+              return acc;
+            }, {});
+
+            const total = Object.keys(jobs).length;
+            if(total === 0) core.setFailed('no jobs found');
+
+            // the name here must be the same as `jobs.xxx.{name}`
+            console.log('visual-diff report job status: %s', jobs['test image']);
+
+            // set output
+            core.setOutput('build-success', jobs['test image'] === 'success');
+            core.setOutput('build-failure', jobs['test image'] === 'failure');
+            return jobs;
+
+  persist-image-snapshots:
+    name: persist image-snapshots
+    permissions:
+      actions: read # for dawidd6/action-download-artifact to query and download artifacts
+    runs-on: ubuntu-latest
+    needs: [upstream-workflow-summary]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+        with:
+          # checkout the head sha/branch that triggered this workflow
+          ref: ${{ github.event.workflow_run.head_sha || github.event.workflow_run.head_branch}}
+
+      # We need get persist key first
+      - name: Download Visual Regression Ref
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          workflow: ${{ github.event.workflow_run.workflow_id }}
+          run_id: ${{ github.event.workflow_run.id }}
+          name: visual-regression-ref
+          path: ./tmp
+
+      # Save visual-regression ref to output
+      - name: Extra Visual Regression Ref
+        id: visual_regression
+        run: echo "id=$(<tmp/visual-regression-ref.txt)" >> $GITHUB_OUTPUT
+
+      - name: Download Visual-Regression Artifact
+        if: ${{ fromJSON(needs.upstream-workflow-summary.outputs.build-success) }}
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          workflow: ${{ github.event.workflow_run.workflow_id }}
+          run_id: ${{ github.event.workflow_run.id }}
+          name: image-snapshots
+          path: ./tmp
+
+      - name: Persist Image Snapshot to OSS
+        if: github.repository == 'ant-design/ant-design' && github.event.workflow_run.event == 'push' && (github.event.workflow_run.head_branch == 'master' || github.event.workflow_run.head_branch == 'feature' || github.event.workflow_run.head_branch == 'next')
+        env:
+          ALI_OSS_AK_ID: ${{ secrets.ALI_OSS_AK_ID }}
+          ALI_OSS_AK_SECRET: ${{ secrets.ALI_OSS_AK_SECRET }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          rm package.json
+          npm i ali-oss --no-save
+          echo "✅ Install `ali-oss` Finished"
+
+          echo "🔍 Preparing"
+          mv ./tmp/imageSnapshots.tar.gz ./imageSnapshots.tar.gz
+          mv ./tmp/visual-regression-ref.txt ./visual-regression-ref.txt
+
+          echo "🤖 Uploading"
+          node scripts/visual-regression/upload.js ./imageSnapshots.tar.gz --ref=$HEAD_SHA
+          node scripts/visual-regression/upload.js ./visual-regression-ref.txt --ref=$HEAD_BRANCH
+
+          echo "✅ Uploaded"

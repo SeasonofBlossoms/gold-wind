@@ -1,0 +1,121 @@
+# 正在分析一个名为"👀 Visual Regression Diff Build"的GitHub Actions工作流。这个工作流的主要目的是在拉取请求（PR）中生成视觉回归差异报告，帮助检查代码变更是否按预期工作。
+
+# 工作流触发条件：
+
+# 在pull_request事件上触发，针对特定分支（master, feature, next）和特定类型（opened, synchronize, reopened）
+# 并发控制：
+
+# 使用concurrency组来确保同一工作流和PR（或ref）只有一个实例运行，新的提交会取消正在进行的运行。
+# 工作流包含两个主要任务：
+
+# visual-diff-snapshot：生成快照
+
+# 使用矩阵策略分片运行（1/2和2/2）
+# 步骤：
+# 检出代码
+# 安装Bun
+# 运行Bun安装依赖
+# 生成图像快照：安装Puppeteer，运行版本命令，然后运行测试命令（分片）
+# 上传生成的快照作为工件（按作业索引命名），保留2天
+# visual-diff-report：生成差异报告
+
+# 需要第一个任务完成
+# 步骤：
+# 检出代码
+# 安装Bun和依赖
+# 下载之前上传的快照工件（合并多个）
+# 运行视觉回归差异测试：使用Bun运行测试命令，传入PR ID和基础引用（base ref）等参数
+# 上传报告工件（visualRegressionReport.tar.gz ）
+# 保存PR ID到一个文本文件，并作为另一个工件上传（供后续工作流使用）
+# 注意：第二个任务中的“upload report artifact”步骤使用了if: ${{ always() }}，这意味着即使之前的步骤失败，它也会运行，确保报告工件被上传。
+# Each PR will visual-regression diff that help to check code is work as expect.
+
+name: 👀 Visual Regression Diff Build
+
+on:
+  pull_request:
+    branches: [master, feature, next]
+    types: [opened, synchronize, reopened]
+
+# Cancel prev CI if new commit come
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ############################ Generate Snapshot ###########################
+  visual-diff-snapshot:
+    name: visual-diff snapshot
+    strategy:
+      matrix:
+        shard: [1/2, 2/2]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - name: generate image snapshots
+        id: test-image
+        run: |
+          node node_modules/puppeteer/install.mjs
+          bun run version
+          bun run test:image -- --shard=${{matrix.shard}}
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+
+      - uses: actions/upload-artifact@v4
+        name: artifact snapshot
+        with:
+          name: snapshot-artifacts-${{ strategy.job-index }}
+          path: imageSnapshots/
+          retention-days: 2
+
+  ############################### Diff Images ##############################
+  visual-diff-report:
+    name: visual-diff report
+    runs-on: ubuntu-latest
+    needs: visual-diff-snapshot
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: snapshot-artifacts-*
+          merge-multiple: true
+          path: imageSnapshots/
+
+      # Execute visual regression diff task and zip then
+      # output as visualRegressionReport.tar.gz
+      - name: visual regression diff
+        env:
+          EVENT_NUMBER: ${{ github.event.number }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          bun run test:visual-regression -- --pr-id=$EVENT_NUMBER --base-ref=$BASE_REF --max-workers=2
+
+      # Upload report in `visualRegressionReport`
+      - name: upload report artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: visual-regression-report
+          path: visualRegressionReport.tar.gz
+
+      # Upload git ref for next workflow `visual-regression-diff-finish` use
+      - name: Save persist key
+        if: ${{ always() }}
+        # should be pr id
+        run: echo ${{ github.event.number }} > ./visual-regression-pr-id.txt
+
+      - name: Upload persist key
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-diff-ref
+          path: ./visual-regression-pr-id.txt
