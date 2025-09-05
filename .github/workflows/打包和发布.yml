@@ -74,9 +74,6 @@ jobs:
       - name: Run build
         run: npm run build --if-present # 运行构建脚本，假设你的 package.json 中定义了 build 脚本
 
-      # - name: Run tests
-      #   run: npm test --if-present # 运行测试脚本，假设你的 package.json 中定义了 test 脚本
-
       - name: Check build artifacts
         run: | # 检查所有在 package.json 的 "files" 字段中声明的目录和文件是否存在
           REQUIRED_ARTIFACTS=("BUG_VERSIONS.json" "dist" "es" "lib" "locale")
@@ -133,40 +130,6 @@ jobs:
           else
             npm publish
           fi
-
-      # - name: Generate changelog
-      #   run: |
-      #     if [ -f "node_modules/.bin/conventional-changelog" ] || npm list conventional-changelog-cli >/dev/null 2>&1; then
-      #       npx conventional-changelog -p angular -i CHANGELOG.md -s
-      #       echo "Changelog generated using conventional-changelog"
-      #     else
-      #       echo "conventional-changelog not available, creating basic changelog entry"
-      #       echo -e "# $(date +%Y-%m-%d)\n\n* Version ${{ steps.version-info.outputs.clean-version }} released.\n" >> CHANGELOG.md
-      #     fi
-
-      # - name: Create GitHub Release
-      #   uses: softprops/action-gh-release@v1
-      #   with:
-      #     tag_name: ${{ github.ref_name }}
-      #     name: Release ${{ github.ref_name }}
-      #     body: |
-      #       # Version ${{ steps.version-info.outputs.clean-version }} Released
-      #       ## Installation
-      #       ```bash
-      #       npm install your-package-name${{ steps.npm-tag.outputs.NPM_TAG != 'latest' && format('@{0}', steps.npm-tag.outputs.NPM_TAG) || '' }}
-      #       ```
-      #     body_path: CHANGELOG.md
-      #     files: | # 包含 package.json 的 "files" 字段中指定的所有目录和文件，以及 package.json 本身
-      #       BUG_VERSIONS.json
-      #       dist/**
-      #       es/**
-      #       lib/**
-      #       locale/**
-      #       package.json
-      #     draft: false
-      #     prerelease: ${{ steps.version-info.outputs.pre-release-type != '' }}
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GOLD_WIND_TOKEN }} # 使用默认的 GOLD_WIND_TOKEN
 
       - name: Notify success
         if: success()
