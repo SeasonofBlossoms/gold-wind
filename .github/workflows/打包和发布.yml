@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     env: # 设置环境变量
       NODE_VERSION: '20.x' # 定义 Node.js 版本
-      NPM_REGISTRY: 'https://registry.npmjs.org' # 定义 npm  registry
+      NPM_REGISTRY: 'https://registry.npmjs.org' # 定义 npm registry
 
     steps:
       - name: Checkout code
@@ -24,17 +24,26 @@ jobs:
           cache: 'npm'
           registry-url: ${{ env.NPM_REGISTRY }}
 
-      # - name: Cache node modules
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: ~/.npm
-      #     key: npm-${{ hashFiles('**/package-lock.json') }}
-      #     restore-keys: |
-      #       npm-
+      # 修改缓存策略：基于 package.json 而不是 package-lock.json
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        run: |
+          echo "dir=$(npm config get cache)" >> $GITHUB_OUTPUT
 
-      # - name: Install dependencies
-      #   run: npm ci --prefer-offline
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        id: npm-cache
+        with:
+          path: |
+            ${{ steps.npm-cache-dir.outputs.dir }}
+            node_modules
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-deps-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-deps-
+
+      # 修改安装命令：使用 npm install 而不是 npm ci
       - name: Install dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
         run: npm install
 
       - name: Validate tag and extract version info
