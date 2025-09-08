@@ -74,12 +74,10 @@ async function checkCommit({ files }: StatusResult) {
 async function checkRemote() {
   spinner.start('正在检查远程分支');
   const { remote } = await git.fetch('origin', 'main');
-  if (!remote?.includes('ant-design/ant-design')) {
+  if (!remote?.includes('gold-wind')) {
     const { value } = await git.getConfig('remote.origin.url');
-    if (!value?.includes('ant-design/ant-design')) {
-      spinner.fail(
-        chalk.red('🧐 Your remote origin is not ant-design/ant-design, did you fork it?'),
-      );
+    if (!value?.includes('gold-wind')) {
+      spinner.fail(chalk.red('🧐 Your remote origin is not gold-wind, did you fork it?'));
       exitProcess();
     }
   }
